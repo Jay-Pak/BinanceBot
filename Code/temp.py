@@ -45,14 +45,36 @@ def binance_btc_liq_balance(wallet_balance, contract_qty, entry_price):
             break
     return round(liq_price, 2)
 
-leverage = 5
-margin = 1000
-total_balance = margin * leverage
-betSize = total_balance/7
-status = ''
-user_price = 10000
-user_liq_price = 0
-count = 0
-pre_betSize = betSize
 
-print(binance_btc_liq_balance(pre_betSize/leverage, pre_betSize/user_price, user_price))
+# print(binance_btc_liq_balance(1000,1,17000))
+
+
+
+def support_resistive_line(current_price):
+    week_lines = [10000, 20000, 30000, 40000, 50000]
+    day_lines = [13000, 18000, 24000, 26000, 31000]
+    total_lines = week_lines + day_lines
+
+    result = []
+    final_result = []
+    week_margin_factor = 0.01
+    day_margin_factor = 0.02
+    while(len(result) != 2):
+        smallest = 0
+        for i in total_lines:
+            if(abs(current_price - i) <= abs(smallest - current_price)):
+                smallest = i
+        result.append(smallest)
+        total_lines.remove(smallest)
+
+    for i in result:
+        if i in week_lines:
+            w_margin = i * week_margin_factor
+            final_result.append([i-w_margin, i+w_margin])
+        
+        elif i in day_lines:
+            d_margin = i * day_margin_factor
+            final_result.append([i-d_margin, i+d_margin])
+
+    result.sort
+    return final_result

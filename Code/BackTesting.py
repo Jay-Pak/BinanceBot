@@ -36,7 +36,7 @@ def binance_btc_liq_balance(wallet_balance, contract_qty, entry_price):
         base_balance = liq_price * abs(contract_qty)
         if base_balance <= max_position:
             break
-    return round(liq_price, 2)
+    return abs(entry_price - round(liq_price, 2))
 
 #수익금
 def amount_of_profit_for_long(user_price, closed_price, margin, leverage):
@@ -53,7 +53,7 @@ def profit_Rate(profit, margin):
     return result
 
 #일봉 백테스팅
-directory = 'Data/BTCUSDT_Binance_futures_UM_hour.csv'
+directory = 'Data/BTCUSDT_Binance_futures_UM_day.csv'
 temp_btc1d = pd.read_csv(directory)
 btc1d = temp_btc1d.loc[::-1].reset_index(drop=True)
 btc1d['Date'] = pd.to_datetime(btc1d.Date)
@@ -70,7 +70,6 @@ total_balance = margin * leverage
 betSize = total_balance/7
 status = ''
 user_price = 0
-user_liq_price = 0
 count = 0
 pre_betSize = 0
 
@@ -78,7 +77,7 @@ total_profit = 0
 win_rate = 0
 win = 0
 lose = 0
-
+print('------------------------------------------------------------------------------------')
 
 for i in range(len(BTC1D)):
     if(count == 0 and BTC1D['RSI'][i] <= 25):
@@ -86,24 +85,47 @@ for i in range(len(BTC1D)):
         user_price = BTC1D['Close'][i]
         count += 1
         pre_betSize = betSize
+        print('롱진입 성공!!! 롱 진입가 : ', user_price, 'count : ', ' closed_price : ',BTC1D['Close'][i], count, 'i : ', i, ' RSI : ',BTC1D['RSI'][i])
         continue
     elif(count == 0 and BTC1D['RSI'][i] >= 75):
         status = 'short'
         user_price = BTC1D['Close'][i]
         count += 1
         pre_betSize = betSize
+        print('숏진입 성공!!! 숏 진입가 : ', user_price, 'count : ',' closed_price : ',BTC1D['Close'][i], count, 'i : ', i, ' RSI : ',BTC1D['RSI'][i])
         continue
     
+#청산가 도달 시 청산
+    if(status == 'long'):
+        if(BTC1D['Close'][i] <= user_price - binance_btc_liq_balance(pre_betSize/leverage, pre_betSize/user_price, user_price)):
+            print('롱으로 청산하셨습니다. ', 'user_price : ', user_price, 'liq_price : ', user_price - binance_btc_liq_balance(pre_betSize/leverage, pre_betSize/user_price, user_price), ' closed_price : ',BTC1D['Close'][i], ' RSI : ',BTC1D['RSI'][i])
+            lose += 1
+            status = ''
+            user_price = 0
+            pre_betSize = 0
+            total_profit = -99999999999999999999999999999999999999
+    elif(status == 'short'):
+        if(BTC1D['Close'][i] >= user_price + binance_btc_liq_balance(pre_betSize/leverage, pre_betSize/user_price, user_price)):
+            print('숏으로 청산하셨습니다. ', 'user_price : ', user_price, 'liq_price : ', user_price + binance_btc_liq_balance(pre_betSize/leverage, pre_betSize/user_price, user_price), ' closed_price : ',BTC1D['Close'][i], ' RSI : ',BTC1D['RSI'][i])
+            lose += 1
+            status = ''
+            user_price = 0
+            pre_betSize = 0
+            total_profit = -99999999999999999999999999999999999999
+
     if(count >= 1 and count < 7 and status == 'long'):
         if(BTC1D['RSI'][i] <= 30):
             user_price = ((user_price*pre_betSize) + BTC1D['Close'][i]*(betSize))/(pre_betSize + betSize)
             pre_betSize += betSize
+            print('롱 물타기 완료, 현재 평단 user_price : ', user_price, ' pre_betSize : ', pre_betSize, ' closed_price : ',BTC1D['Close'][i], ' RSI : ',BTC1D['RSI'][i])
     elif(count >=1 and count < 7 and status == 'short'):
         if(BTC1D['RSI'][i] >= 70):
             user_price = ((user_price*pre_betSize) + BTC1D['Close'][i]*(betSize))/(pre_betSize + betSize)
             pre_betSize += betSize
+            print('숏 물타기 완료, 현재 평단 user_price : ', user_price, ' pre_betSize : ', pre_betSize, ' closed_price : ',BTC1D['Close'][i], ' RSI : ',BTC1D['RSI'][i])
 #익절 손절(정한 수치 수익률에 따라)
-    if(status == "long" and profit_Rate(amount_of_profit_for_long(user_price, BTC1D['Close'][i], pre_betSize/leverage, leverage), pre_betSize/leverage) >= 15):
+    if(status == "long" and profit_Rate(amount_of_profit_for_long(user_price, BTC1D['Close'][i], pre_betSize/leverage, leverage), pre_betSize/leverage) >= 20):
+        print('롱 익절 완료 user_price : ', user_price, ' closed_price : ', BTC1D['Close'][i], '수익금 : ', amount_of_profit_for_long(user_price, BTC1D['Close'][i], pre_betSize/leverage, leverage), ' 수익률 : ', profit_Rate(amount_of_profit_for_long(user_price, BTC1D['Close'][i], pre_betSize/leverage, leverage), pre_betSize/leverage))
         total_profit += amount_of_profit_for_long(user_price, BTC1D['Close'][i], pre_betSize/leverage, leverage)
         win += 1
         count = 0
@@ -113,6 +135,7 @@ for i in range(len(BTC1D)):
         continue
             
     elif(status == "long" and profit_Rate(amount_of_profit_for_long(user_price, BTC1D['Close'][i], pre_betSize/leverage, leverage), pre_betSize/leverage) <= -10):
+        print('롱 손절 완료 user_price : ', user_price, ' closed_price : ', BTC1D['Close'][i], '수익금 : ', amount_of_profit_for_long(user_price, BTC1D['Close'][i], pre_betSize/leverage, leverage), ' 수익률 : ', profit_Rate(amount_of_profit_for_long(user_price, BTC1D['Close'][i], pre_betSize/leverage, leverage), pre_betSize/leverage))
         total_profit += amount_of_profit_for_long(user_price, BTC1D['Close'][i], pre_betSize/leverage, leverage)
         lose += 1
         count = 0
@@ -121,7 +144,8 @@ for i in range(len(BTC1D)):
         pre_betSize = 0
         continue
         
-    elif(status == "short" and profit_Rate(amount_of_profit_for_short(user_price, BTC1D['Close'][i], pre_betSize/leverage, leverage), pre_betSize/leverage) >= 15):
+    elif(status == "short" and profit_Rate(amount_of_profit_for_short(user_price, BTC1D['Close'][i], pre_betSize/leverage, leverage), pre_betSize/leverage) >= 20):
+        print('숏 익절 완료 user_price : ', user_price, ' closed_price : ', BTC1D['Close'][i], '수익금 : ', amount_of_profit_for_short(user_price, BTC1D['Close'][i], pre_betSize/leverage, leverage), ' 수익률 : ', profit_Rate(amount_of_profit_for_short(user_price, BTC1D['Close'][i], pre_betSize/leverage, leverage), pre_betSize/leverage))
         total_profit += amount_of_profit_for_short(user_price, BTC1D['Close'][i], pre_betSize/leverage, leverage)
         win += 1
         count = 0
@@ -131,6 +155,7 @@ for i in range(len(BTC1D)):
         continue
         
     elif(status == "short" and profit_Rate(amount_of_profit_for_short(user_price, BTC1D['Close'][i], pre_betSize/leverage, leverage), pre_betSize/leverage) <= -10):
+        print('숏 손절 완료 user_price : ', user_price, ' closed_price : ', BTC1D['Close'][i], '수익금 : ', amount_of_profit_for_short(user_price, BTC1D['Close'][i], pre_betSize/leverage, leverage), ' 수익률 : ', profit_Rate(amount_of_profit_for_short(user_price, BTC1D['Close'][i], pre_betSize/leverage, leverage), pre_betSize/leverage))
         total_profit += amount_of_profit_for_short(user_price, BTC1D['Close'][i], pre_betSize/leverage, leverage)
         lose += 1
         count = 0
@@ -141,43 +166,32 @@ for i in range(len(BTC1D)):
     
 #7일간 매수 후  7일이 지났으면 손절 or 익절
     if(count >= 13 and status == 'long'):
-        if((BTC1D['Close'][i] - user_price) >= 0):
+        if(amount_of_profit_for_long(user_price, BTC1D['Close'][i], pre_betSize/leverage, leverage) >= 0):
             win += 1
             total_profit += amount_of_profit_for_long(user_price, BTC1D['Close'][i], pre_betSize/leverage, leverage)
+            print('7일 지나서 롱 익절 완료 user_price : ', user_price, ' pre_betSize : ', pre_betSize, '수익금', amount_of_profit_for_long(user_price, BTC1D['Close'][i], pre_betSize/leverage, leverage), ' closed_price : ',BTC1D['Close'][i],)
         else:
             lose += 1
             total_profit += amount_of_profit_for_long(user_price, BTC1D['Close'][i], pre_betSize/leverage, leverage)
+            print('7일 지나서 롱 손절 완료 user_price : ', user_price, ' pre_betSize : ', pre_betSize, '수익금', amount_of_profit_for_long(user_price, BTC1D['Close'][i], pre_betSize/leverage, leverage), ' closed_price : ',BTC1D['Close'][i],)
         count = 0
         status = ""
         user_price = 0
         pre_betSize = 0
     elif(count >= 13 and status == 'short'):
-        if((BTC1D['Close'][i] - user_price) < 0):
+        if(amount_of_profit_for_short(user_price, BTC1D['Close'][i], pre_betSize/leverage, leverage) >= 0):
             win += 1
             total_profit += amount_of_profit_for_short(user_price, BTC1D['Close'][i], pre_betSize/leverage, leverage)
+            print('7일 지나서 숏 익절 완료 user_price : ', user_price, ' pre_betSize : ', pre_betSize, '수익금', amount_of_profit_for_short(user_price, BTC1D['Close'][i], pre_betSize/leverage, leverage), ' closed_price : ',BTC1D['Close'][i],)
         else:
             lose += 1
             total_profit += amount_of_profit_for_short(user_price, BTC1D['Close'][i], pre_betSize/leverage, leverage)
+            print('7일 지나서 숏 손절 완료 user_price : ', user_price, ' pre_betSize : ', pre_betSize, '수익금', amount_of_profit_for_short(user_price, BTC1D['Close'][i], pre_betSize/leverage, leverage), ' closed_price : ',BTC1D['Close'][i],)
         count = 0
         status = ""
         user_price = 0
         pre_betSize = 0
 
-#청산가 도달 시 청산
-    if(status == 'long'):
-        if(BTC1D['Close'][i] <= binance_btc_liq_balance(pre_betSize/leverage, pre_betSize/user_price, user_price)):
-            lose += 1
-            status = ''
-            user_price = 0
-            pre_betSize = 0
-            total_profit = -99999999999999999999999999999999999999
-    elif(status == 'short'):
-        if(BTC1D['Close'][i] >= binance_btc_liq_balance(pre_betSize/leverage, pre_betSize/user_price, user_price)):
-            lose += 1
-            status = ''
-            user_price = 0
-            pre_betSize = 0
-            total_profit = -99999999999999999999999999999999999999
     if(count >= 1):
         count +=1
 
